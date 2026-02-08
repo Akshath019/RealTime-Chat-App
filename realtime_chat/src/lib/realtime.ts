@@ -17,6 +17,12 @@ const schema = {
     destroy: z.object({
       isDestroyed: z.literal(true),
     }),
+    user_joined: z.object({
+      username: z.string(),
+    }),
+    user_left: z.object({
+      username: z.string(),
+    }),
   },
 };
 
@@ -24,4 +30,4 @@ export const realtime = new Realtime({ schema, redis });
 
 export type RealtimeEvents = InferRealtimeEvents<typeof realtime>;
 
-export type Message = z.infer<typeof message>
+export type Message = z.infer<typeof message>;
