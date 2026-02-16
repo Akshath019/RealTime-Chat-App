@@ -12,7 +12,6 @@ const rooms = new Elysia({ prefix: "/room" })
     const roomId = nanoid();
 
     await redis.hset(`meta:${roomId}`, {
-      connected: [],
       createdAt: Date.now(),
     });
 
@@ -36,9 +35,10 @@ const rooms = new Elysia({ prefix: "/room" })
         .channel(auth.roomId)
         .emit("chat.destroy", { isDestroyed: true });
       await Promise.all([
-        await redis.del(auth.roomId),
-        await redis.del(`meta:${auth.roomId}`),
-        await redis.del(`messages:${auth.roomId}`),
+        redis.del(auth.roomId),
+        redis.del(`meta:${auth.roomId}`),
+        redis.del(`connected:${auth.roomId}`),
+        redis.del(`messages:${auth.roomId}`),
       ]);
     },
     { query: z.object({ roomId: z.string() }) },
@@ -75,6 +75,7 @@ const messages = new Elysia({ prefix: "/messages" })
       const remaining = await redis.ttl(`meta:${roomId}`);
 
       await redis.expire(`messages:${roomId}`, remaining);
+      await redis.expire(`connected:${roomId}`, remaining);
       await redis.expire(`history:${roomId}`, remaining);
       await redis.expire(roomId, remaining);
     },

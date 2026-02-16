@@ -10,38 +10,49 @@ export const proxy = async (req: NextRequest) => {
 
   const roomId = roomMatch[1];
 
-  const meta = await redis.hgetall<{ connected: string[]; createdAt: number }>(
-    `meta:${roomId}`,
-  );
-  if (!meta) {
+  const roomExists = await redis.exists(`meta:${roomId}`);
+  if (!roomExists) {
     return NextResponse.redirect(new URL("/?error=room-not-found", req.url));
   }
 
-  const existingToken = req.cookies.get("x-auth-token")?.value
+  const existingToken = req.cookies.get("x-auth-token")?.value;
 
-  if(existingToken && meta.connected.includes(existingToken)){
-    return NextResponse.next()
-
+  if (existingToken) {
+    const isMember = await redis.sismember(`connected:${roomId}`, existingToken);
+    if (isMember) {
+      return NextResponse.next();
+    }
   }
 
-  if(meta.connected.length >= 2){
-    return NextResponse.redirect(new URL("/?error=room-full",req.url))
+  // Atomically check capacity and add user (prevents race conditions)
+  const token = nanoid();
+  const added = await redis.eval(
+    `local count = redis.call('SCARD', KEYS[1])
+     if count >= 2 then return 0 end
+     redis.call('SADD', KEYS[1], ARGV[1])
+     return 1`,
+    [`connected:${roomId}`],
+    [token],
+  );
+
+  if (added === 0) {
+    return NextResponse.redirect(new URL("/?error=room-full", req.url));
   }
 
   const response = NextResponse.next();
-
-  const token = nanoid();
 
   response.cookies.set("x-auth-token", token, {
     path: "/",
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
-    sameSite: "strict",
+    sameSite: "lax",
   });
 
-  await redis.hset(`meta:${roomId}`, {
-    connected: [...meta.connected, token],
-  });
+  // Sync TTL with the room
+  const ttl = await redis.ttl(`meta:${roomId}`);
+  if (ttl > 0) {
+    await redis.expire(`connected:${roomId}`, ttl);
+  }
 
   return response;
 };
