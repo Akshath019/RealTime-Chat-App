@@ -1,6 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
 import { redis } from "./lib/redis";
 import { nanoid } from "nanoid";
+
+function isBot(userAgent: string): boolean {
+  const botPatterns = [
+    /bot/i,
+    /crawler/i,
+    /spider/i,
+    /whatsapp/i,
+    /telegram/i,
+    /slack/i,
+    /discord/i,
+    /twitter/i,
+    /facebook/i,
+    /linkedin/i,
+    /preview/i,
+    /prefetch/i,
+  ];
+  return botPatterns.some((pattern) => pattern.test(userAgent));
+}
+
 export default async function middleware(req: NextRequest) {
   const pathname = req.nextUrl.pathname;
 
@@ -13,6 +32,13 @@ export default async function middleware(req: NextRequest) {
   const roomExists = await redis.exists(`meta:${roomId}`);
   if (!roomExists) {
     return NextResponse.redirect(new URL("/?error=room-not-found", req.url));
+  }
+
+  // Check if this is a bot/crawler/preview request
+  const userAgent = req.headers.get("user-agent") || "";
+  if (isBot(userAgent)) {
+    // Allow bots to access the page for preview, but don't add them to the room
+    return NextResponse.next();
   }
 
   const existingToken = req.cookies.get("x-auth-token")?.value;
