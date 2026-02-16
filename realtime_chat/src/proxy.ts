@@ -36,7 +36,7 @@ export const proxy = async (req: NextRequest) => {
     path: "/",
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
+    sameSite: "strict",
   });
 
   await redis.hset(`meta:${roomId}`, {
